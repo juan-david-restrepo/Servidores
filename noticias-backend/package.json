@@ -1,0 +1,21 @@
+{
+  "name": "noticias-backend",
+  "version": "1.0.0",
+  "description": "Backend para scraping de noticias IDTQ",
+  "main": "serve.js",
+  "scripts": {
+    "start": "node serve.js"
+  },
+  "keywords": ["noticias", "scraping", "idtq"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.2",
+    "cheerio": "^1.0.0",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
