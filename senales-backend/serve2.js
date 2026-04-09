@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
-const puppeteer = require('puppeteer');
+const axios = require('axios');
+const cheerio = require('cheerio');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -15,57 +16,40 @@ app.use(cors({
 }));
 
 app.get('/api/senales', async (req, res) => {
-  let browser;
   try {
-    browser = await puppeteer.launch({ 
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    const response = await axios.get('https://practicatest.co/senales-transito-colombia', {
+      timeout: 10000
     });
-    const page = await browser.newPage();
+    
+    const $ = cheerio.load(response.data);
+    const senales = [];
 
-    await page.goto('https://practicatest.co/senales-transito-colombia', { waitUntil: 'networkidle2' });
-    await page.waitForSelector('h2.apartado', { timeout: 15000 });
+    $('h2.apartado').each((_, h2) => {
+      const titulo = $(h2).text().toLowerCase();
+      let tipo = null;
+      if (titulo.includes('reglament')) tipo = 'reglamentarias';
+      else if (titulo.includes('peligro') || titulo.includes('prevent')) tipo = 'preventivas';
+      else if (titulo.includes('inform')) tipo = 'informativas';
+      else if (titulo.includes('transitor')) tipo = 'transitorias';
 
-    const senales = await page.evaluate(() => {
-      const result = [];
+      if (tipo) {
+        const parent = $(h2).parent();
+        parent.find('img').each((_, img) => {
+          const src = $(img).attr('src') || '';
+          const imgSrc = src.startsWith('http') ? src : 'https://practicatest.co' + src;
+          const nombre = src.split('/').pop().split('.')[0].toUpperCase().replace(/_/g, ' ');
+          
+          const nextP = $(img).next('p');
+          const descripcion = nextP.length ? nextP.text().trim() : '';
 
-      document.querySelectorAll('h2.apartado').forEach(h2 => {
-        const titulo = h2.innerText.toLowerCase();
-        let tipo = null;
-        if (titulo.includes('reglament')) tipo = 'reglamentarias';
-        else if (titulo.includes('peligro') || titulo.includes('prevent')) tipo = 'preventivas';
-        else if (titulo.includes('inform')) tipo = 'informativas';
-        else if (titulo.includes('transitor')) tipo = 'transitorias';
-
-        if (tipo) {
-          let parent = h2.parentElement;
-          const imgs = parent.querySelectorAll('img');
-
-          imgs.forEach(img => {
-            let nombre = img.src.split('/').pop().split('.')[0].toUpperCase();
-            nombre = nombre.replace(/_/g, ' ');
-
-            let descripcion = '';
-            let nextP = img.nextElementSibling;
-            if (nextP && nextP.tagName === 'P') descripcion = nextP.innerText.trim();
-
-            let imagen = img.src;
-            if (imagen && !imagen.startsWith('http')) imagen = 'https://practicatest.co' + imagen;
-
-            result.push({ tipo, nombre, descripcion, imagen });
-          });
-        }
-      });
-
-      return result;
+          senales.push({ tipo, nombre, descripcion, imagen: imgSrc });
+        });
+      }
     });
 
-    await browser.close();
     res.json(senales);
-
   } catch (err) {
-    if (browser) await browser.close();
-    console.error('Error scraping señales:', err);
+    console.error('Error scraping señales:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
