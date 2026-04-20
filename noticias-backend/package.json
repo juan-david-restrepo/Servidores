@@ -6,14 +6,18 @@
   "scripts": {
     "start": "node serve.js"
   },
-  "keywords": ["noticias", "scraping", "idtq"],
+  "keywords": [
+    "noticias",
+    "scraping",
+    "idtq"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
     "axios": "^1.6.2",
     "cheerio": "^1.0.0",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "express": "^4.22.1"
   },
   "engines": {
     "node": ">=16.0.0"

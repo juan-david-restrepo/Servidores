@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3002;
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS 
     ? process.env.ALLOWED_ORIGINS.split(',') 
-    : ['https://frontend-eight-beta-69.vercel.app', 'http://localhost:3000', 'http://localhost:3002'];
+    : ['https://frontend-eight-beta-69.vercel.app', 'http://localhost:3000', 'http://localhost:3002', 'http://localhost:4200'];
 
 app.use(cors({
     origin: ALLOWED_ORIGINS,
