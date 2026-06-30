@@ -15,45 +15,49 @@ app.use(cors({
 }));
 app.use(express.json());
 
+const cache = new Map();
+const CACHE_TTL = 5 * 60 * 1000;
+
+function getFromCache(key) {
+  const entry = cache.get(key);
+  if (entry && Date.now() - entry.timestamp < CACHE_TTL) return entry.data;
+  cache.delete(key);
+  return null;
+}
+
+function setCache(key, data) {
+  cache.set(key, { data, timestamp: Date.now() });
+}
+
 async function obtenerNoticiasIDTQ(start = 0) {
   try {
+    const cacheKey = `list-${start}`;
+    const cached = getFromCache(cacheKey);
+    if (cached) return cached;
+
     const url = `https://www.idtq.gov.co/?start=${start}`;
 
     const { data } = await axios.get(url, {
       headers: {
         "User-Agent": "Mozilla/5.0",
         "Accept-Language": "es-CO,es;q=0.9"
-      }
+      },
+      timeout: 15000
     });
 
     const $ = cheerio.load(data);
     const noticias = [];
 
-    $("h2 a, h3 a").each((_, el) => {
-      if (noticias.length >= 12) return;
+    $('div.item[itemprop="blogPost"]').each((_, item) => {
+      const $item = $(item);
 
-      const titulo = $(el).text().trim();
-      const enlaceRelativo = $(el).attr("href");
+      const $link = $item.find('h2 a[itemprop="url"]').first();
+      const titulo = $link.text().trim();
+      const enlaceRelativo = $link.attr("href");
 
       if (!titulo || !enlaceRelativo) return;
-      if (!enlaceRelativo.includes("idtq")) return;
 
-      const contenedor = $(el).closest("div, article");
-
-      let imagen =
-        contenedor.find("img").first().attr("src") ||
-        contenedor.parent().find("img").first().attr("src") ||
-        null;
-
-      if (!imagen) {
-        const style = contenedor.find("[style*='background-image']").attr("style");
-        if (style) {
-          const match = style.match(/url\((.*?)\)/);
-          if (match && match[1]) {
-            imagen = match[1].replace(/['"]/g, "");
-          }
-        }
-      }
+      let imagen = $item.find('.item-image img').first().attr("src") || null;
 
       if (imagen) {
         if (imagen.startsWith("//")) imagen = "https:" + imagen;
@@ -64,13 +68,10 @@ async function obtenerNoticiasIDTQ(start = 0) {
         ? enlaceRelativo
         : "https://www.idtq.gov.co" + enlaceRelativo;
 
-      noticias.push({
-        titulo,
-        imagen,
-        enlace
-      });
+      noticias.push({ titulo, imagen, enlace });
     });
 
+    setCache(cacheKey, noticias);
     return noticias;
   } catch (error) {
     console.error("Error scraper:", error.message);
@@ -95,18 +96,30 @@ app.get("/api/noticia-detalle", async (req, res) => {
     const url = req.query.url;
     if (!url) return res.status(400).json({ error: "URL requerida" });
 
-    const { data } = await axios.get(url);
+    const cacheKey = `detail-${url}`;
+    const cached = getFromCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const { data } = await axios.get(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept-Language": "es-CO,es;q=0.9"
+      },
+      timeout: 15000
+    });
     const $ = cheerio.load(data);
 
-    const titulo = $(".itemTitle").text().trim();
-    const fecha = $(".itemDateCreated").text().trim();
-    let contenido = $(".itemFullText").html() || "";
-    let imagen = $(".itemImage img").attr("src") || $(".itemFullText img").first().attr("src") || null;
+    const titulo = $('[itemprop="headline"]').first().text().trim();
+    const fecha = $('[itemprop="datePublished"]').attr('datetime') || $(".published").text().trim();
+    let contenido = $('[itemprop="articleBody"]').html() || "";
+    let imagen = $('[itemprop="image"]').first().attr("src") || $(".item-image img").first().attr("src") || null;
 
     if (imagen && imagen.startsWith("/")) imagen = "https://www.idtq.gov.co" + imagen;
     contenido = contenido.replace(/src="\/([^"]+)"/g, 'src="https://www.idtq.gov.co/$1"');
 
-    res.json({ titulo, fecha, imagen, contenido });
+    const result = { titulo, fecha, imagen, contenido };
+    setCache(cacheKey, result);
+    res.json(result);
   } catch (error) {
     console.error("Error detalle noticia:", error.message);
     res.status(500).json({ error: "Error al obtener detalle" });
